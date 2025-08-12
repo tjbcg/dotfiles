@@ -14,7 +14,7 @@ vim.keymap.set('n', '<Esc><Esc>', ':w<cr>')
 vim.g.mapleader = ' '
 
 vim.keymap.set('n', '<Leader>q', ':q<CR>', { silent = true, desc = "Leave!" })
-vim.keymap.set('n', '<Leader><Return>', ':set hlsearch!<CR>', { silent = true, desc = "Toggle search highlighting" })
+vim.keymap.set('n', '<Return>', ':set hlsearch!<CR>', { silent = true, desc = "Toggle search highlighting" })
 
 -- Bootstrap lazy.nvim
 local lazypath = vim.fn.stdpath("data") .. "/lazy/lazy.nvim"
@@ -38,6 +38,7 @@ end
 
 require("lazy").setup({
   {
+    "gentoo/gentoo-syntax",
     { "nvim-treesitter/nvim-treesitter", build = ":TSUpdate" },
     'romgrk/barbar.nvim',
     dependencies = {
@@ -79,12 +80,16 @@ require("lazy").setup({
     version = '^1.0.0', -- optional: only update when a new 1.x version is released
   },
   {
-    "folke/tokyonight.nvim",
+    "nyoom-engineering/oxocarbon.nvim",
     lazy = false,
     priority = 1000,
     config = function()
-      vim.cmd([[colorscheme tokyonight-moon]])
-    end,
+      -- Optionally configure and load the colorscheme
+      -- directly inside the plugin declaration.
+      -- vim.g.sonokai_enable_italic = true
+      vim.opt.background = "dark"
+      vim.cmd.colorscheme('oxocarbon')
+    end
   },
   {
     "lervag/vimtex",
@@ -184,6 +189,22 @@ require("lazy").setup({
         }
       })
       return {
+        formatting = {
+          format = function(entry, vim_item)
+            local ELLIPSIS_CHAR = '…'
+            local MAX_LABEL_WIDTH = 40
+            local MIN_LABEL_WIDTH = 20
+            local label = vim_item.abbr
+            local truncated_label = vim.fn.strcharpart(label, 0, MAX_LABEL_WIDTH)
+            if truncated_label ~= label then
+              vim_item.abbr = truncated_label .. ELLIPSIS_CHAR
+            elseif string.len(label) < MIN_LABEL_WIDTH then
+              local padding = string.rep(' ', MIN_LABEL_WIDTH - string.len(label))
+              vim_item.abbr = label .. padding
+            end
+            return vim_item
+          end,
+        },
         snippet = {
           expand = function(args)
             require('luasnip').lsp_expand(args.body)
@@ -284,6 +305,12 @@ require("lazy").setup({
   },
   'kaarmu/typst.vim',
   {
+    'chomosuke/typst-preview.nvim',
+    ft = 'typst', -- or ft = 'typst'
+    version = '1.*',
+    opts = {},    -- lazy.nvim will implicitly calls `setup {}`
+  },
+  {
     "nvim-neo-tree/neo-tree.nvim",
     lazy = false,
     branch = "v3.x",
@@ -321,6 +348,8 @@ require("lazy").setup({
     }
   },
   { 'echasnovski/mini.bufremove', version = '*' },
+  'jamessan/vim-gnupg',
+  'godlygeek/tabular'
 })
 
 require('lualine').setup {
@@ -367,7 +396,7 @@ require('lualine').setup {
 require 'neodev'.setup {}
 
 local capabilities = require("cmp_nvim_lsp").default_capabilities()
-local servers = { 'pyright', 'rust_analyzer', 'lua_ls', 'ts_ls', 'clangd', 'tinymist' }
+local servers = { 'pyright', 'rust_analyzer', 'lua_ls', 'ts_ls', 'clangd' }
 local lspconfig = require('lspconfig')
 for _, lsp in ipairs(servers) do
   lspconfig[lsp].setup {
@@ -376,16 +405,44 @@ for _, lsp in ipairs(servers) do
   }
 end
 
--- lspconfig.tinymist.setup{
--- offset_encoding = "utf-8",
--- capabilities = capabilities
--- }
+lspconfig.tinymist.setup {
+  settings = {
+    formatterMode = "typstyle",
+    exportPdf = "onType",
+    preview = {
+      cursorIndicator = true
+    }
+    -- outputPath = "$dir/$name",
+    -- semanticTokens = "disable"
+  },
+  on_attach = function(client, bufnr)
+    vim.keymap.set("n", "<leader>to", function()
+      local filepath = vim.api.nvim_buf_get_name(0)
+      if filepath:match("%.typ$") then
+        local pdf_path = filepath:gsub("%.typ$", ".pdf")
+        vim.system({ "open", pdf_path })
+      end
+    end, { desc = "[T]ypst [O]pen PDF", noremap = true })
+    vim.keymap.set("n", "<leader>tp", function()
+      client:exec_cmd({
+        title = "pin",
+        command = "tinymist.pinMain",
+        arguments = { vim.api.nvim_buf_get_name(0) },
+      }, { bufnr = bufnr })
+    end, { desc = "[T]inymist [P]in", noremap = true })
 
----@diagnostic disable-next-line: missing-fields
-require('ufo').setup {
-  provider_selector = function(_, _, _)
-    return { 'treesitter', 'indent' }
-  end
+    vim.keymap.set("n", "<leader>tu", function()
+      client:exec_cmd({
+        title = "unpin",
+        command = "tinymist.pinMain",
+        arguments = { vim.v.null },
+      }, { bufnr = bufnr })
+    end, { desc = "[T]inymist [U]npin", noremap = true })
+  end,
+}
+
+lspconfig.sourcekit.setup {
+  cmd = { 'sourcekit-lsp-docker' }
 }
 
 vim.api.nvim_create_autocmd('LspAttach', {
@@ -407,6 +464,7 @@ vim.api.nvim_create_autocmd('LspAttach', {
     vim.keymap.set('n', '<Leader>wl', function()
       print(vim.inspect(vim.lsp.buf.list_workspace_folders()))
     end, opts)
+    vim.keymap.set('n', '<Leader>e', function() vim.diagnostic.open_float({ scope = "line" }) end, opts)
     vim.keymap.set('n', '<Leader>D', vim.lsp.buf.type_definition, opts)
     vim.keymap.set('n', '<Leader>rn', vim.lsp.buf.rename, opts)
     vim.keymap.set({ 'n', 'v' }, '<Leader>ca', vim.lsp.buf.code_action, opts)
@@ -417,7 +475,15 @@ vim.api.nvim_create_autocmd('LspAttach', {
   end,
 })
 
--- ufo fold config
+--- ufo fold config
+
+---@diagnostic disable-next-line: missing-fields
+require('ufo').setup {
+  provider_selector = function(_, _, _)
+    return { 'treesitter', 'indent' }
+  end
+}
+
 vim.o.foldcolumn = '1' -- '0' is not bad
 vim.o.foldlevel = 99   -- Using ufo provider need a large value, feel free to decrease the value
 vim.o.foldlevelstart = 99
