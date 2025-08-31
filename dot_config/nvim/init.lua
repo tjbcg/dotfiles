@@ -5,6 +5,8 @@ vim.opt.smarttab = true
 vim.opt.shiftwidth = 2
 vim.opt.tabstop = 2
 vim.opt.expandtab = true
+vim.opt.textwidth = 80
+vim.opt.colorcolumn = "81,101"
 
 vim.opt.splitright = true
 vim.opt.splitbelow = true
@@ -15,6 +17,9 @@ vim.g.mapleader = ' '
 
 vim.keymap.set('n', '<Leader>q', ':q<CR>', { silent = true, desc = "Leave!" })
 vim.keymap.set('n', '<Return>', ':set hlsearch!<CR>', { silent = true, desc = "Toggle search highlighting" })
+
+-- vim.diagnostic.config({ virtual_lines = true })
+vim.diagnostic.config({ virtual_text = true })
 
 -- Bootstrap lazy.nvim
 local lazypath = vim.fn.stdpath("data") .. "/lazy/lazy.nvim"
